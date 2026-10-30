@@ -1,0 +1,53 @@
+name: Build PixelSift preview
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Source commit to build
+        required: true
+        default: b5eacc95b80cc409bd510deedf78232b6bed27ce
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+      - name: Fetch verified upstream runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 https://github.com/xiangye-zephyr/VidTuck/releases/download/v0.2.6/VidTuck-0.2.6-macOS-arm64.zip -o "$RUNNER_TEMP/runtime.zip"
+          echo "7df49a42631fa9bdff6b4a57d2b276671ebb118b23d22cb44084735663391d30  $RUNNER_TEMP/runtime.zip" | shasum -a 256 -c -
+          ditto -x -k "$RUNNER_TEMP/runtime.zip" "$RUNNER_TEMP/vendor"
+          TOOLS="$RUNNER_TEMP/vendor/VidTuck.app/Contents/Resources/tools"
+          mkdir -p .build-tools/ffmpeg-built/bin
+          for tool in yt-dlp deno yt-dlp-runtime; do ln -s "$TOOLS/$tool" ".build-tools/$tool"; done
+          for tool in ffmpeg ffprobe; do ln -s "$TOOLS/$tool" ".build-tools/ffmpeg-built/bin/$tool"; done
+      - name: Build and verify application
+        shell: bash
+        run: |
+          set -euo pipefail
+          zsh scripts/build.sh "$PWD/.build-tools" "$PWD/build/PixelSift.app"
+          codesign --verify --deep --strict build/PixelSift.app
+          test -f build/PixelSift.app/Contents/Resources/LICENSE.txt
+          if find build/PixelSift.app -name 'cookies-*.txt' -o -name 'library.json' -o -name 'extractor-info-*.json' | grep -q .; then exit 1; fi
+      - name: Package installation files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          ditto -c -k --sequesterRsrc --keepParent build/PixelSift.app release/PixelSift-0.3.0-preview.1-macOS-arm64.zip
+          cd release
+          shasum -a 256 PixelSift-0.3.0-preview.1-macOS-arm64.zip > SHA256SUMS.txt
+          printf '%s\n' 'PixelSift 0.3.0-preview.1' 'Apple Silicon · macOS 15+' '解压后将 PixelSift.app 放入应用程序。' '首次启动若被系统阻止，请参考 https://support.apple.com/zh-cn/102445' '当前为临时签名，未经苹果公证。无需关闭系统安全保护。' '源码与使用说明：https://github.com/wujimu4-jpg/PixelSift' > INSTALL.txt
+          cat SHA256SUMS.txt
+      - name: Upload to draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release upload v0.3.0-preview.1 release/PixelSift-0.3.0-preview.1-macOS-arm64.zip release/SHA256SUMS.txt release/INSTALL.txt --repo "$GITHUB_REPOSITORY"
