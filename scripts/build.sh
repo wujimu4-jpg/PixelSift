@@ -24,6 +24,8 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 PLIST
 if [[ -f "$PROJECT_DIR/Resources/AppIcon.icns" ]]; then cp "$PROJECT_DIR/Resources/AppIcon.icns" "$APP_DIR/Contents/Resources/"; fi
 if [[ -d "$PROJECT_DIR/ThirdParty" ]]; then ditto "$PROJECT_DIR/ThirdParty" "$APP_DIR/Contents/Resources/ThirdParty"; fi
+cp "$PROJECT_DIR/LICENSE" "$APP_DIR/Contents/Resources/LICENSE.txt"
+cp "$PROJECT_DIR/README.md" "$APP_DIR/Contents/Resources/README.md"
 codesign --force --sign - "$APP_DIR/Contents/MacOS/PixelSift"
 codesign --force --sign - "$APP_DIR"
 echo "$APP_DIR"
